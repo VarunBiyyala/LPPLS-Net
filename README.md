@@ -4,7 +4,7 @@ This repository contains the official poster presented at the **SIAM Conference 
 
 ## 📌 Poster
 
-📄 [Download Poster (PDF)](./LPPLS_Net__SIAM_Poster.pdf)
+📄 [Download Poster (PDF)](./LPPLS_Net__SIAM_Poster (2).pdf)
 
 The poster provides a concise summary of our proposed method, synthetic data generation, topological validation, and evaluation on real-world market scenarios (Dot-com and Lehman collapse).
 
