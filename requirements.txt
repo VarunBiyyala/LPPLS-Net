@@ -1,0 +1,7 @@
+
+arch
+numpy
+torch
+matplotlib
+pandas
+pandas_datareader
