@@ -23,10 +23,18 @@ Our method achieves fast and accurate detection of critical points, with perform
 - **Curriculum learning** and **soft-penalty losses** for stable and accurate parameter recovery.
 - Validated on Dot-com and Lehman crash periods using real market data.
 
-## 🧪 Code (Coming Soon)
+## 🚀 Getting Started: Demo Notebook
 
-We will be releasing cleaned training code and Jupyter notebooks for generating synthetic LPPLS datasets and reproducing baseline results.  
-Stay tuned!
+To quickly try LPPLS-Net, see [`demo.ipynb`](./demo.ipynb).  
+This notebook provides:
+
+- Setup and installation instructions
+- Example code to generate or load data
+- Step-by-step guide to train and using the LPPLS-Net model
+- Visualization and experimentation tips
+
+**How to use:**
+- Run `demo.ipynb` locally or in [Google Colab](https://colab.research.google.com/) for an interactive experience.
 
 ## 🔗 Links
 
