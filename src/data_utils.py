@@ -132,12 +132,12 @@ def generate_synthetic_dataset(n_samples=10000,
             series_noisy = add_ar1_noise(series, phi=phi, noise_level=chosen_noise)
             selected_noise_type = 'ar1'
         elif noise_type == 'ARCH':
-            chosen_noise = np.random.uniform(0.01, 0.05)
+            chosen_noise = np.random.uniform(0.01, 0.15)
             series_noisy = add_arch_garch_noise(series, noise_level=chosen_noise)
             selected_noise_type = 'ARCH'
         elif noise_type == 'GARCH':
-            chosen_noise = np.random.uniform(0.01, 0.05)
-            series_noisy = add_arch_garch_noise(series, noise_level=chosen_noise)
+            chosen_noise = np.random.uniform(0.01, 0.15)
+            series_noisy = add_arch_garch_noise(series,  model_type="GARCH", noise_level=chosen_noise)
             selected_noise_type = 'GARCH'
         elif noise_type == 'white+ar1': # 'mixed' or 'both'
             # 50% chance white, 50% chance AR1
@@ -153,12 +153,12 @@ def generate_synthetic_dataset(n_samples=10000,
             # 50% chance white, 50% chance AR1
             if np.random.rand() < 0.5:
                 selected_noise_type  = 'ARCH'
-                chosen_noise = np.random.uniform(0.01, 0.05)
+                chosen_noise = np.random.uniform(0.01, 0.15)
                 series_noisy = add_arch_garch_noise(series, noise_level=chosen_noise)
             else:
                 selected_noise_type  = 'GARCH'
-                chosen_noise = np.random.uniform(0.01, 0.05)
-                series_noisy = add_arch_garch_noise(series, noise_level=chosen_noise)
+                chosen_noise = np.random.uniform(0.01, 0.15)
+                series_noisy = add_arch_garch_noise(series, model_type="GARCH", noise_level=chosen_noise)
 
         elif noise_type == 'ar1+GARCH': # 'mixed' or 'both'
             # 50% chance white, 50% chance AR1
@@ -168,8 +168,8 @@ def generate_synthetic_dataset(n_samples=10000,
                 series_noisy = add_ar1_noise(series, phi=phi, noise_level=chosen_noise)
             else:
                 selected_noise_type  = 'GARCH'
-                chosen_noise = np.random.uniform(0.01, 0.05)
-                series_noisy = add_arch_garch_noise(series, noise_level=chosen_noise)
+                chosen_noise = np.random.uniform(0.01, 0.15)
+                series_noisy = add_arch_garch_noise(series, model_type="GARCH", noise_level=chosen_noise)
 
 
         elif noise_type == 'none':
