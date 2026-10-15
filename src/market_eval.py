@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import torch
+import yfinance as yf
 
 def plot_lppls_scenarios(
     model,
