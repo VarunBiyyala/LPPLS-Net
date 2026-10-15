@@ -52,15 +52,15 @@ def generate_lppls_series(tc, m, omega, n_points=252, A=1.0, B=-1.0):
     with user-specified (tc, m, omega).
     """
     t_array = np.arange(n_points)
-    epsilon = 1e-7  # to avoid log(0)
+    #epsilon = 1e-7  # to avoid log(0)
 
     # Evaluate (tc - t)
     denom = (tc - t_array)
     # Basic LPPLS
-    lppls = A + B*np.power(np.abs(denom), m)
+    lppls_power = np.power(denom, m)
     c1 = 0.1
     c2 = 0.1
-    lppls = lppls*(1 + c1*np.cos(omega*np.log(np.abs(denom)+epsilon)) + c2*np.sin(omega*np.log(np.abs(denom)+epsilon)))
+    lppls = A + lppls_power*(B + c1*np.cos(omega*np.log(denom)) + c2*np.sin(omega*np.log(denom)))
 
     return lppls
 

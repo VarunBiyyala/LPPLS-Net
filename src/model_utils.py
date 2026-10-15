@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import pandas as pd
 import torch.nn.functional as F
+import copy
 
 class PLNNet1(nn.Module):
     """
@@ -91,91 +92,317 @@ def weighted_mse_loss(preds, targets):
     loss = torch.mean(loss_tc + loss_m + loss_w)
     return loss
 
-def train_p_lnn(model, train_dataset, val_dataset, n_epochs=20, batch_size=8, lr=1e-5, weight_decay=1e-4, patience=5):
+def train_p_lnn(
+    model,
+    train_dataset,
+    val_dataset,
+    n_epochs=100,
+    batch_size=8,
+    lr=1e-5,
+    weight_decay=1e-4,
+    patience=10,
+    min_delta=1e-5
+):
     """
-    Train the P-LNN model with early stopping if train and val loss do not improve by >1%.
+    Train the P-LNN model using weighted MSE loss.
+
+    Early stopping is based only on validation loss.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        LPPLS neural network.
+
+    train_dataset : list
+        Training samples of the form (X, Y).
+
+    val_dataset : list
+        Validation samples of the form (X, Y).
+
+    n_epochs : int
+        Maximum number of training epochs.
+
+    batch_size : int
+        Number of samples per mini-batch.
+
+    lr : float
+        Learning rate.
+
+    weight_decay : float
+        L2 regularization strength.
+
+    patience : int
+        Number of consecutive epochs without sufficient
+        validation improvement before stopping.
+
+    min_delta : float
+        Minimum absolute decrease in validation loss that
+        counts as an improvement.
+
+    Returns
+    -------
+    train_losses : list
+        Mean training loss for each completed epoch.
+
+    val_losses : list
+        Mean validation loss for each completed epoch.
     """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # --------------------------------------------------
+    # Device
+    # --------------------------------------------------
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() else "cpu"
+    )
+
     print("Using device:", device)
-    model.to(device)
 
-    # Convert datasets to Tensors
-    X_train = torch.stack([torch.from_numpy(sample[0]) for sample in train_dataset])
-    Y_train = torch.stack([torch.from_numpy(sample[1]) for sample in train_dataset])
-    X_val = torch.stack([torch.from_numpy(sample[0]) for sample in val_dataset])
-    Y_val = torch.stack([torch.from_numpy(sample[1]) for sample in val_dataset])
+    model = model.to(device)
 
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-    criterion = nn.MSELoss()
+    # --------------------------------------------------
+    # Convert datasets to tensors
+    # --------------------------------------------------
+    X_train = torch.stack([
+        torch.from_numpy(sample[0]).float()
+        for sample in train_dataset
+    ])
 
-    n_samples = len(train_dataset)
-    indices = np.arange(n_samples)
+    Y_train = torch.stack([
+        torch.from_numpy(sample[1]).float()
+        for sample in train_dataset
+    ])
 
-    model.train()
+    X_val = torch.stack([
+        torch.from_numpy(sample[0]).float()
+        for sample in val_dataset
+    ])
+
+    Y_val = torch.stack([
+        torch.from_numpy(sample[1]).float()
+        for sample in val_dataset
+    ])
+
+    # --------------------------------------------------
+    # Optimizer
+    # --------------------------------------------------
+    optimizer = optim.Adam(
+        model.parameters(),
+        lr=lr,
+        weight_decay=weight_decay
+    )
+
+    n_train = len(train_dataset)
+    n_val = len(val_dataset)
+
+    indices = np.arange(n_train)
+
+    # --------------------------------------------------
+    # Tracking
+    # --------------------------------------------------
     train_losses = []
     val_losses = []
 
-    best_train_loss = float('inf')
-    best_val_loss = float('inf')
+    best_val_loss = float("inf")
+    best_model_state = None
+    best_epoch = 0
+
     no_improvement_epochs = 0
 
+    # --------------------------------------------------
+    # Training loop
+    # --------------------------------------------------
     for epoch in range(n_epochs):
-        np.random.shuffle(indices)
-        epoch_loss = 0.0
 
-        for start_idx in range(0, n_samples, batch_size):
-            end_idx = start_idx + batch_size
+        # ==================================================
+        # TRAINING
+        # ==================================================
+        model.train()
+
+        np.random.shuffle(indices)
+
+        total_train_loss = 0.0
+
+        for start_idx in range(0, n_train, batch_size):
+
+            end_idx = min(
+                start_idx + batch_size,
+                n_train
+            )
+
             batch_indices = indices[start_idx:end_idx]
 
             x_batch = X_train[batch_indices].to(device)
             y_batch = Y_train[batch_indices].to(device)
 
+            # Forward pass
             preds = model(x_batch)
-            loss = weighted_mse_loss(preds, y_batch)
 
+            loss = weighted_mse_loss(
+                preds,
+                y_batch
+            )
+
+            # Backpropagation
             optimizer.zero_grad()
+
             loss.backward()
+
             optimizer.step()
 
-            epoch_loss += loss.item() * len(batch_indices)
-        epoch_loss /= n_samples
-        train_losses.append(epoch_loss)
+            # Actual number of samples in this batch
+            actual_batch_size = x_batch.size(0)
 
+            total_train_loss += (
+                loss.item()
+                * actual_batch_size
+            )
+
+        epoch_train_loss = (
+            total_train_loss / n_train
+        )
+
+        train_losses.append(
+            epoch_train_loss
+        )
+
+        # ==================================================
+        # VALIDATION
+        # ==================================================
         model.eval()
-        val_loss = 0.0
-        n_val = len(val_dataset)
+
+        total_val_loss = 0.0
+
         with torch.no_grad():
-            for start_idx in range(0, n_val, batch_size):
-                end_idx = start_idx + batch_size
-                x_val_batch = X_val[start_idx:end_idx].to(device)
-                y_val_batch = Y_val[start_idx:end_idx].to(device)
 
-                preds_val = model(x_val_batch)
-                loss_val = weighted_mse_loss(preds_val, y_val_batch)
-                val_loss += loss_val.item() * (end_idx - start_idx)
-        val_loss /= n_val
-        val_losses.append(val_loss)
+            for start_idx in range(
+                0,
+                n_val,
+                batch_size
+            ):
 
-        # Check for >1% improvement
-        train_improved = epoch_loss < 0.99 * best_train_loss
-        val_improved = val_loss < 0.99 * best_val_loss
+                end_idx = min(
+                    start_idx + batch_size,
+                    n_val
+                )
 
-        if train_improved:
-            best_train_loss = epoch_loss
-        if val_improved:
-            best_val_loss = val_loss
+                x_val_batch = (
+                    X_val[start_idx:end_idx]
+                    .to(device)
+                )
 
-        if not (train_improved or val_improved):
-            no_improvement_epochs += 1
-        else:
+                y_val_batch = (
+                    Y_val[start_idx:end_idx]
+                    .to(device)
+                )
+
+                preds_val = model(
+                    x_val_batch
+                )
+
+                loss_val = weighted_mse_loss(
+                    preds_val,
+                    y_val_batch
+                )
+
+                # IMPORTANT:
+                # Use actual batch size,
+                # especially for the final partial batch.
+                actual_batch_size = (
+                    x_val_batch.size(0)
+                )
+
+                total_val_loss += (
+                    loss_val.item()
+                    * actual_batch_size
+                )
+
+        epoch_val_loss = (
+            total_val_loss / n_val
+        )
+
+        val_losses.append(
+            epoch_val_loss
+        )
+
+        # ==================================================
+        # CHECK FOR VALIDATION IMPROVEMENT
+        # ==================================================
+        improvement = (
+            best_val_loss
+            - epoch_val_loss
+        )
+
+        if improvement > min_delta:
+
+            best_val_loss = epoch_val_loss
+
+            best_epoch = epoch + 1
+
+            # Save weights corresponding to
+            # best validation performance
+            best_model_state = copy.deepcopy(
+                model.state_dict()
+            )
+
             no_improvement_epochs = 0
 
-        model.train()
-        if (epoch + 1) % 5 == 0:
-            print(f"Epoch {epoch + 1}/{n_epochs}, Train Loss = {epoch_loss:.6f}, Val Loss = {val_loss:.6f}")
+        else:
 
-        if no_improvement_epochs >= patience:
-            print(f"Early stopping at epoch {epoch + 1} due to no 1% improvement in train/val loss for {patience} epochs.")
+            no_improvement_epochs += 1
+
+        # ==================================================
+        # LOGGING
+        # ==================================================
+        if (
+            (epoch + 1) == 1
+            or (epoch + 1) % 5 == 0
+        ):
+
+            print(
+                f"Epoch {epoch + 1}/{n_epochs} | "
+                f"Train Loss: "
+                f"{epoch_train_loss:.6f} | "
+                f"Val Loss: "
+                f"{epoch_val_loss:.6f}"
+            )
+
+        # ==================================================
+        # EARLY STOPPING
+        # ==================================================
+        if (
+            no_improvement_epochs
+            >= patience
+        ):
+
+            print(
+                f"\nEarly stopping at epoch "
+                f"{epoch + 1}."
+            )
+
+            print(
+                f"Validation loss did not improve "
+                f"by more than {min_delta} for "
+                f"{patience} consecutive epochs."
+            )
+
             break
+
+    # --------------------------------------------------
+    # Restore best model
+    # --------------------------------------------------
+    if best_model_state is not None:
+
+        model.load_state_dict(
+            best_model_state
+        )
+
+        print(
+            f"\nRestored model from "
+            f"epoch {best_epoch} "
+            f"with best validation loss "
+            f"{best_val_loss:.6f}."
+        )
+
+    print("Training complete!")
 
     return train_losses, val_losses
